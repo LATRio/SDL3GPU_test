@@ -1,0 +1,8 @@
+# IDE items
+/.idea
+
+# Executable
+/bin/nvrhi_test
+
+# Shader
+*.spv
