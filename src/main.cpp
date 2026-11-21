@@ -1,13 +1,13 @@
-#include <filesystem>
 #include <SDL3/SDL.h>
+#include <filesystem>
 #define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL_main.h>
 #include <tracy/Tracy.hpp>
 
-#include "input.hpp"
 #include "asset_manager.hpp"
-#include "renderer.hpp"
 #include "camera.hpp"
+#include "input.hpp"
+#include "renderer.hpp"
 
 namespace {
 struct AppContext {
@@ -41,7 +41,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
     context->camera = new Camera();
 
     AssetManager *assetManager = AssetManager::getInstance();
-    assetManager->loadGltf("/mnt/windowsssd/Games/Assets/3D/mario_kart_8_deluxe_-_los_angeles_laps_tour/scene.gltf");
+    std::string structurePath{"/mnt/windowsssd/Games/Assets/3D/structure.glb"};
+    assetManager->loadGltf(structurePath);
 
     return SDL_APP_CONTINUE;
 }
@@ -56,9 +57,8 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
     case SDL_EVENT_WINDOW_RESIZED: {
         context->width = event->window.data1;
         context->height = event->window.data2;
-        context->camera->calcProjMatrix(static_cast<float>(context->width) /
-                                           static_cast<float>(context->height));
-        //Renderer::getInstance()->ChangeResolution(context->width, context->height);
+        context->camera->calcProjMatrix(static_cast<float>(context->width) / static_cast<float>(context->height));
+        // Renderer::getInstance()->ChangeResolution(context->width, context->height);
         break;
     }
     case SDL_EVENT_KEY_DOWN:
@@ -89,7 +89,9 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     const Uint64 currentTicks{SDL_GetTicksNS()};
     float deltaTime{static_cast<float>(currentTicks - context->lastTicks) / 1000000000.0f};
     context->lastTicks = currentTicks;
-    SDL_Log("DeltaTime: %fs", deltaTime);
+
+    //SDL_Log("DeltaTime: %fs", deltaTime);
+
     if (deltaTime >= 0.1f) {
         SDL_Log("DeltaTime too high! Capping to 0.1s");
         deltaTime =

@@ -2,6 +2,7 @@
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_log.h>
+#include <fastgltf/glm_element_traits.hpp>
 #include <tracy/Tracy.hpp>
 
 AssetManager *AssetManager::getInstance() {
@@ -12,7 +13,7 @@ AssetManager *AssetManager::getInstance() {
     return instance;
 }
 
-void AssetManager::loadGltf(const std::string &filename) {
+void AssetManager::loadGltf(const std::string_view &filename) {
     ZoneScoped;
 
     if (!filename.contains(".gltf") && !filename.contains(".glb")) {
@@ -22,19 +23,47 @@ void AssetManager::loadGltf(const std::string &filename) {
 
     // const std::filesystem::path fullPath(std::filesystem::path(SDL_GetBasePath()) / filename); // relative path
     const std::filesystem::path fullPath(filename); // absolute path
-    auto data{fg::GltfDataBuffer::FromPath(fullPath)};
-    if (data.error() != fg::Error::None) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load asset: %s: %s", fg::getErrorName(data.error()),
-                     fg::getErrorMessage(data.error()));
+
+    auto data = fg::GltfDataBuffer::FromPath(fullPath);
+    if (!data) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load asset: %s: %s",
+                     fg::getErrorName(data.error()).data(), fg::getErrorMessage(data.error()).data());
         return;
     }
 
-    auto asset{mParser.loadGltf(data.get(), fullPath.parent_path())};
-    if (const auto error = asset.error(); error != fg::Error::None) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to parse gltf: %s: %s", fg::getErrorName(error),
-                     fg::getErrorMessage(error));
+    constexpr auto gltfOptions{fg::Options::DontRequireValidAssetMember | fg::Options::AllowDouble |
+                               fg::Options::LoadExternalBuffers};
+
+    fg::Parser mParser{};
+    fg::Asset asset;
+
+    auto type{fg::determineGltfFileType(data.get())};
+    if (type == fastgltf::GltfType::glTF) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Parsing glTF file: %s", fullPath.c_str());
+        auto loadedAsset{mParser.loadGltf(data.get(), fullPath.parent_path(), gltfOptions)};
+        if (loadedAsset) {
+            asset = std::move(loadedAsset.get());
+        } else {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to parse gltf: %s - %s",
+                         fg::getErrorName(loadedAsset.error()).data(), fg::getErrorMessage(loadedAsset.error()).data());
+            return;
+        }
+    } else if (type == fastgltf::GltfType::GLB) {
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Parsing GLB file: %s", fullPath.c_str());
+        auto loadedAsset{mParser.loadGltfBinary(data.get(), fullPath.parent_path(), gltfOptions)};
+        if (loadedAsset) {
+            asset = std::move(loadedAsset.get());
+        } else {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to parse GLB: %s - %s",
+                         fg::getErrorName(loadedAsset.error()).data(), fg::getErrorMessage(loadedAsset.error()).data());
+            return;
+        }
+    } else {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to determine glTF container!");
+        return;
     }
-    for (auto &scene : asset->scenes) {
+
+    for (auto &scene : asset.scenes) {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Loaded scene: %s", scene.name.c_str());
     }
 }

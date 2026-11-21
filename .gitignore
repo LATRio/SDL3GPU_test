@@ -3,6 +3,7 @@
 
 # Executable
 /bin/SDL3GPU_test
+/bin/*.so*
 
 # Shader
 *.spv

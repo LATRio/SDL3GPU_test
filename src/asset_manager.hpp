@@ -1,18 +1,17 @@
 #pragma once
-#include <string>
 #include <fastgltf/core.hpp>
+#include <string>
 
 namespace fg = fastgltf;
 
 class AssetManager {
-public:
+  public:
     ~AssetManager() = default;
-    static AssetManager* getInstance();
+    static AssetManager *getInstance();
 
-    void loadGltf(const std::string& filename);
+    void loadGltf(const std::string_view &filename);
 
-private:
+  private:
     AssetManager() = default;
 
-    fg::Parser mParser;
 };

@@ -1,0 +1,18 @@
+[submodule "deps/fastgltf"]
+	path = deps/fastgltf
+	url = https://github.com/spnda/fastgltf.git
+[submodule "deps/glm"]
+	path = deps/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "deps/imgui"]
+	path = deps/imgui
+	url = https://github.com/ocornut/imgui.git
+[submodule "deps/SDL"]
+	path = deps/SDL
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "deps/SDL_shadercross"]
+	path = deps/SDL_shadercross
+	url = https://github.com/libsdl-org/SDL_shadercross.git
+[submodule "deps/tracy"]
+	path = deps/tracy
+	url = https://github.com/wolfpld/tracy.git
