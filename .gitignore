@@ -2,7 +2,7 @@
 /.idea
 
 # Executable
-/bin/nvrhi_test
+/bin/SDL3GPU_test
 
 # Shader
 *.spv

@@ -2,57 +2,43 @@
 #include <SDL3/SDL.h>
 #define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL_main.h>
-#include <glm/gtc/matrix_transform.hpp>
 #include <tracy/Tracy.hpp>
 
-#include "asset_manager.hpp"
 #include "input.hpp"
+#include "asset_manager.hpp"
 #include "renderer.hpp"
-#include "renderer_nvrhi.hpp"
+#include "camera.hpp"
 
-constexpr int32_t defaultWidth{1280};
-constexpr int32_t defaultHeight{720};
-
-struct Camera {
-    glm::vec3 camPosition{};
-    glm::mat4 matProj{};
-    glm::mat4 matViewProj{};
-
-    Camera() { calcProjMatrix(defaultWidth / static_cast<float>(defaultHeight)); }
-
-    void calcProjMatrix(const float aspectRatio) {
-        matProj = glm::perspective(glm::radians(90.0f), aspectRatio, 0.01f, 1000.0f);
-    }
-};
-
-struct MyAppState {
+namespace {
+struct AppContext {
     SDL_Window *window{};
-    RendererNVRHI *renderer{};
+    Renderer *renderer{};
     Camera *camera{};
 
     int32_t width{defaultWidth};
     int32_t height{defaultHeight};
     uint64_t lastTicks{};
 };
+} // namespace
 
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
     ZoneScoped;
-    const auto myAppState{new MyAppState()};
-    *appstate = myAppState;
+    const auto context{new AppContext()};
+    *appstate = context;
 
-    myAppState->window = SDL_CreateWindow("Hello, SDL GPU!", myAppState->width, myAppState->height, 0);
-    if (!myAppState->window) {
+    context->window = SDL_CreateWindow("Hello, SDL GPU!", context->width, context->height, 0);
+    if (!context->window) {
         SDL_Log("Couldn't create window: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
-    myAppState->renderer = RendererNVRHI::getInstance();
-    if (!myAppState->renderer->Init(myAppState->window, myAppState->width, myAppState->height)) {
+    context->renderer = Renderer::getInstance();
+    if (!context->renderer->Init(context->window, context->width, context->height)) {
         SDL_Log("Couldn't create renderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
 
-    myAppState->camera = new Camera();
+    context->camera = new Camera();
 
     AssetManager *assetManager = AssetManager::getInstance();
     assetManager->loadGltf("/mnt/windowsssd/Games/Assets/3D/mario_kart_8_deluxe_-_los_angeles_laps_tour/scene.gltf");
@@ -62,17 +48,17 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
     ZoneScoped;
-    const auto myAppState{static_cast<MyAppState *>(appstate)};
+    const auto context{static_cast<AppContext *>(appstate)};
     switch (event->type) {
     case SDL_EVENT_QUIT: {
         return SDL_APP_SUCCESS;
     }
     case SDL_EVENT_WINDOW_RESIZED: {
-        myAppState->width = event->window.data1;
-        myAppState->height = event->window.data2;
-        myAppState->camera->calcProjMatrix(static_cast<float>(myAppState->width) /
-                                           static_cast<float>(myAppState->height));
-        RendererNVRHI::getInstance()->ChangeResolution(myAppState->width, myAppState->height);
+        context->width = event->window.data1;
+        context->height = event->window.data2;
+        context->camera->calcProjMatrix(static_cast<float>(context->width) /
+                                           static_cast<float>(context->height));
+        //Renderer::getInstance()->ChangeResolution(context->width, context->height);
         break;
     }
     case SDL_EVENT_KEY_DOWN:
@@ -87,7 +73,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
     return SDL_APP_CONTINUE;
 }
 
-void GameUpdate(const MyAppState *appstate, const float deltaTime) {
+void GameUpdate(const AppContext *appstate, const float deltaTime) {
     ZoneScoped;
     const glm::mat4 viewMatrix{glm::lookAt(glm::vec3(0.0f, 0.0f, 5.0f), // Camera position
                                            glm::vec3(0.0f, 0.0f, 0.0f), // Target position
@@ -98,11 +84,11 @@ void GameUpdate(const MyAppState *appstate, const float deltaTime) {
 
 SDL_AppResult SDL_AppIterate(void *appstate) {
     ZoneScoped;
-    const auto myAppState{static_cast<MyAppState *>(appstate)};
+    const auto context{static_cast<AppContext *>(appstate)};
 
     const Uint64 currentTicks{SDL_GetTicksNS()};
-    float deltaTime{static_cast<float>(currentTicks - myAppState->lastTicks) / 1000000000.0f};
-    myAppState->lastTicks = currentTicks;
+    float deltaTime{static_cast<float>(currentTicks - context->lastTicks) / 1000000000.0f};
+    context->lastTicks = currentTicks;
     SDL_Log("DeltaTime: %fs", deltaTime);
     if (deltaTime >= 0.1f) {
         SDL_Log("DeltaTime too high! Capping to 0.1s");
@@ -112,9 +98,9 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
 
     Input::getInstance()->update();
 
-    GameUpdate(myAppState, deltaTime);
+    GameUpdate(context, deltaTime);
 
-    if (!myAppState->renderer->Render()) {
+    if (!context->renderer->Render()) {
         return SDL_APP_FAILURE;
     }
 
@@ -124,11 +110,11 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
 
 void SDL_AppQuit(void *appstate, SDL_AppResult result) {
     ZoneScoped;
-    const auto myAppState{static_cast<MyAppState *>(appstate)};
+    const auto context{static_cast<AppContext *>(appstate)};
 
-    delete myAppState->renderer;
+    delete context->renderer;
 
-    SDL_DestroyWindow(myAppState->window);
+    SDL_DestroyWindow(context->window);
 
-    delete myAppState;
+    delete context;
 }
