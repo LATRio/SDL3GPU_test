@@ -1,7 +1,8 @@
 #pragma once
 #include <SDL3/SDL_gpu.h>
-#include <cstdint>
 #include <span>
+
+#include "types.hpp"
 
 struct VertexData;
 
@@ -19,6 +20,7 @@ class Renderer {
   private:
     bool CreatePipeline();
     bool CreateVertexBuffer(std::span<VertexData> pVertices);
+    bool CreateMeshBuffer(const MeshData &pMesh);
 
     SDL_GPUVulkanOptions vkOpts{};
 
@@ -26,6 +28,8 @@ class Renderer {
     SDL_GPUDevice *device{};
     SDL_GPUGraphicsPipeline *pipeline{};
     SDL_GPUBuffer *vertexBuffer{};
+    SDL_GPUBuffer *indexBuffer{};
+    MeshData mesh;
 
     uint32_t numVertices{};
     uint32_t framesInFlight{2u};

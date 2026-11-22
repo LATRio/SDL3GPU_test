@@ -3,16 +3,16 @@
 #include <string>
 
 class ShaderManager {
-public:
+  public:
     enum class Type {
         VERTEX,
         FRAGMENT,
         COMPUTE,
     };
 
-    static SDL_GPUShader* LoadShaderFromFile(std::string_view pFilepath, Type pType);
+    static SDL_GPUShader *LoadShaderFromFile(const std::string &pFilepath, Type pType);
 
-private:
+  private:
     static SDL_GPUShader *CompileShader(SDL_GPUDevice *device, const char *code, const char *entrypoint,
                                         SDL_ShaderCross_ShaderStage stage);
 };

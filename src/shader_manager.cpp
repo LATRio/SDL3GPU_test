@@ -4,7 +4,7 @@
 
 #include "renderer.hpp"
 
-SDL_GPUShader *ShaderManager::LoadShaderFromFile(const std::string_view pFilepath, const Type pType) {
+SDL_GPUShader *ShaderManager::LoadShaderFromFile(const std::string &pFilepath, const Type pType) {
     ZoneScoped;
     SDL_GPUDevice *device{Renderer::getInstance()->GetGPUDevice()};
 
@@ -65,6 +65,7 @@ SDL_GPUShader *ShaderManager::CompileShader(SDL_GPUDevice *device, const char *c
     };
     size_t bytecodeSize{};
     const auto bytecode{static_cast<Uint8 *>(SDL_ShaderCross_CompileSPIRVFromHLSL(&hlslInfo, &bytecodeSize))};
+
     if (!bytecode) {
         SDL_Log("Failed to compile SPIR-V from hlsl: %s", SDL_GetError());
         return nullptr;

@@ -8,6 +8,8 @@
 #include "shader_manager.hpp"
 #include "types.hpp"
 
+#include <fastgltf/types.hpp>
+
 Renderer *Renderer::getInstance() {
     static Renderer *instance;
     if (instance == nullptr) {
@@ -18,6 +20,7 @@ Renderer *Renderer::getInstance() {
 
 Renderer::~Renderer() {
     ZoneScoped;
+    SDL_ReleaseGPUBuffer(device, indexBuffer);
     SDL_ReleaseGPUBuffer(device, vertexBuffer);
     SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
 
@@ -36,7 +39,6 @@ bool Renderer::Init(SDL_Window *pWindow, uint32_t pWidth, uint32_t pHeight) {
     SDL_SetStringProperty(props, SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING, "vulkan");
 
     SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true); // Vulkan
-    SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_MSL_BOOLEAN, true);   // Metal
     SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_DXIL_BOOLEAN, true);  // DirectX
 
     SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_VULKAN_REQUIRE_HARDWARE_ACCELERATION_BOOLEAN, true);
@@ -120,13 +122,14 @@ bool Renderer::Init(SDL_Window *pWindow, uint32_t pWidth, uint32_t pHeight) {
         return false;
     }
 
-    std::array vertices{
+    mesh.vertices = {
         VertexData{.position = glm::vec3{-1.0f, -1.0f, 0.0f}, .color = glm::vec3{1.0f, 0.0f, 0.0f}}, // Bottom-Left
         VertexData{.position = glm::vec3{1.0f, -1.0f, 0.0f}, .color = glm::vec3{0.0f, 1.0f, 0.0f}},  // Bottom-Right
         VertexData{.position = glm::vec3{0.0f, 1.0f, 0.0f}, .color = glm::vec3{0.0f, 0.0f, 1.0f}},   // Top Middle
     };
+    mesh.indices = {0u, 1u, 2u};
 
-    if (!CreateVertexBuffer(vertices)) {
+    if (!CreateMeshBuffer(mesh)) {
         return false;
     }
 
@@ -162,11 +165,17 @@ bool Renderer::Render() const {
 
         const std::array vertexBuffers{SDL_GPUBufferBinding{
             .buffer = vertexBuffer,
-            .offset = 0,
+            .offset = 0u,
         }};
         SDL_BindGPUVertexBuffers(renderPass, 0u, vertexBuffers.data(), vertexBuffers.size());
+        const SDL_GPUBufferBinding indBind{
+            .buffer = indexBuffer,
+            .offset = 0u,
+        };
+        SDL_BindGPUIndexBuffer(renderPass, &indBind, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
-        SDL_DrawGPUPrimitives(renderPass, numVertices, 1u, 0u, 0u);
+        //SDL_DrawGPUPrimitives(renderPass, numVertices, 1u, 0u, 0u);
+        SDL_DrawGPUIndexedPrimitives(renderPass, mesh.indices.size(), 1u, 0u, 0, 0u);
 
         SDL_EndGPURenderPass(renderPass);
     }
@@ -323,3 +332,102 @@ bool Renderer::CreateVertexBuffer(const std::span<VertexData> pVertices) {
 
     return true;
 }
+
+bool Renderer::CreateMeshBuffer(const MeshData &pMesh) {
+    ZoneScoped;
+
+    const Uint32 vertDataSize{static_cast<Uint32>(pMesh.vertices.size()) * static_cast<Uint32>(sizeof(pMesh.vertices[0]))};
+    const Uint32 indDataSize{static_cast<Uint32>(pMesh.indices.size()) * static_cast<Uint32>(sizeof(pMesh.indices[0]))};
+
+    const SDL_GPUBufferCreateInfo vertexBufferInfo{
+        .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+        .size = vertDataSize,
+    };
+    vertexBuffer = SDL_CreateGPUBuffer(device, &vertexBufferInfo);
+    if (!vertexBuffer) {
+        SDL_Log("Couldn't create vertex buffer: %s", SDL_GetError());
+        return false;
+    }
+
+    const SDL_GPUBufferCreateInfo indexBufferInfo{
+        .usage = SDL_GPU_BUFFERUSAGE_INDEX,
+        .size = indDataSize,
+    };
+    indexBuffer = SDL_CreateGPUBuffer(device, &indexBufferInfo);
+    if (!indexBuffer) {
+        SDL_Log("Couldn't create index buffer: %s", SDL_GetError());
+        return false;
+    }
+
+    // Upload buffers into GPU's memory from CPU's memory
+    const SDL_GPUTransferBufferCreateInfo transferBufferInfo{
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = vertDataSize + indDataSize,
+    };
+    SDL_GPUTransferBuffer *transferBuffer{SDL_CreateGPUTransferBuffer(device, &transferBufferInfo)};
+    if (!transferBuffer) {
+        SDL_Log("Couldn't create transfer buffer: %s", SDL_GetError());
+        return false;
+    }
+
+    const auto transferData{SDL_MapGPUTransferBuffer(device, transferBuffer, false)};
+    if (!transferData) {
+        SDL_Log("Couldn't map transfer data: %s", SDL_GetError());
+        SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+        return false;
+    }
+
+    SDL_memcpy(transferData, mesh.vertices.data(), vertDataSize);
+    SDL_memcpy(static_cast<char*>(transferData) + vertDataSize, mesh.indices.data(), indDataSize);
+
+    SDL_UnmapGPUTransferBuffer(device, transferBuffer);
+
+    // Command buffer for transfer operation
+    SDL_GPUCommandBuffer *copyCmdBuf{SDL_AcquireGPUCommandBuffer(device)};
+    if (!copyCmdBuf) {
+        SDL_Log("Couldn't acquire command buffer: %s", SDL_GetError());
+        return false;
+    }
+
+    SDL_GPUCopyPass *copyPass{SDL_BeginGPUCopyPass(copyCmdBuf)};
+
+    // Source memory location (CPU)
+    const SDL_GPUTransferBufferLocation vertBufferLocation{
+        .transfer_buffer = transferBuffer,
+        .offset = 0,
+    };
+
+    // Destination memory location (GPU)
+    const SDL_GPUBufferRegion vertBufferRegion{
+        .buffer = vertexBuffer,
+        .offset = 0u,
+        .size = vertDataSize,
+    };
+    SDL_UploadToGPUBuffer(copyPass, &vertBufferLocation, &vertBufferRegion, false);
+
+    // Source memory location (CPU)
+    const SDL_GPUTransferBufferLocation indBufferLocation{
+        .transfer_buffer = transferBuffer,
+        .offset = vertDataSize,
+    };
+
+    // Destination memory location (GPU)
+    const SDL_GPUBufferRegion indBufferRegion{
+        .buffer = indexBuffer,
+        .offset = 0u,
+        .size = indDataSize,
+    };
+    SDL_UploadToGPUBuffer(copyPass, &indBufferLocation, &indBufferRegion, false);
+
+    SDL_EndGPUCopyPass(copyPass);
+    if (!SDL_SubmitGPUCommandBuffer(copyCmdBuf)) {
+        SDL_Log("Couldn't submit GPU command buffer: %s", SDL_GetError());
+        return false;
+    }
+
+    SDL_ReleaseGPUTransferBuffer(device, transferBuffer);
+
+    return true;
+
+}
+

@@ -26,6 +26,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
     const auto context{new AppContext()};
     *appstate = context;
 
+
     context->window = SDL_CreateWindow("Hello, SDL GPU!", context->width, context->height, 0);
     if (!context->window) {
         SDL_Log("Couldn't create window: %s", SDL_GetError());
