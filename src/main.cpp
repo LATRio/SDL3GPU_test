@@ -5,6 +5,7 @@
 #include <tracy/Tracy.hpp>
 
 #include "asset_manager.hpp"
+#include "backends/imgui_impl_sdl3.h"
 #include "camera.hpp"
 #include "input.hpp"
 #include "renderer.hpp"
@@ -35,7 +36,11 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 
     context->renderer = Renderer::getInstance();
     if (!context->renderer->Init(context->window, context->width, context->height)) {
-        SDL_Log("Couldn't create renderer: %s", SDL_GetError());
+        SDL_Log("Couldn't init renderer: %s", SDL_GetError());
+        return SDL_APP_FAILURE;
+    }
+    if (!context->renderer->InitImGui()) {
+        SDL_Log("Couldn't init ImGui");
         return SDL_APP_FAILURE;
     }
 
@@ -51,6 +56,9 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
     ZoneScoped;
     const auto context{static_cast<AppContext *>(appstate)};
+
+    ImGui_ImplSDL3_ProcessEvent(event);
+
     switch (event->type) {
     case SDL_EVENT_QUIT: {
         return SDL_APP_SUCCESS;
@@ -71,6 +79,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
         break;
     }
     }
+
     return SDL_APP_CONTINUE;
 }
 
@@ -85,6 +94,7 @@ void GameUpdate(const AppContext *appstate, const float deltaTime) {
 
 SDL_AppResult SDL_AppIterate(void *appstate) {
     ZoneScoped;
+
     const auto context{static_cast<AppContext *>(appstate)};
 
     const Uint64 currentTicks{SDL_GetTicksNS()};
@@ -103,7 +113,16 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
 
     GameUpdate(context, deltaTime);
 
+    if (!context->renderer->BeginFrame()) {
+        return SDL_APP_FAILURE;
+    }
     if (!context->renderer->Render()) {
+        return SDL_APP_FAILURE;
+    }
+    if (!context->renderer->RenderImGui()) {
+        return SDL_APP_FAILURE;
+    }
+    if (!context->renderer->EndFrame()) {
         return SDL_APP_FAILURE;
     }
 

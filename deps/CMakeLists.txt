@@ -11,6 +11,7 @@ find_package(Vulkan)
 add_library(imgui STATIC EXCLUDE_FROM_ALL)
 target_include_directories(imgui PUBLIC imgui)
 target_sources(imgui PRIVATE
+        imgui/imgui.h
         imgui/imgui.cpp
 
         imgui/imgui_demo.cpp

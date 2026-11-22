@@ -7,3 +7,4 @@
 
 # Shader
 *.spv
+/bin/imgui.ini
