@@ -18,4 +18,5 @@ class Shaders {
 
     SDL_GPUShader *vertex{};
     SDL_GPUShader *fragment{};
+    SDL_GPUShader *compute{};
 };

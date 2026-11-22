@@ -18,6 +18,7 @@ add_executable(SDL3GPU_test
         src/asset_manager.hpp
         src/camera.cpp
         src/camera.hpp
+        src/types.hpp
 )
 
 target_compile_definitions(SDL3GPU_test PRIVATE

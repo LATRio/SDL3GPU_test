@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "shaders.hpp"
+#include "types.hpp"
 
 Renderer *Renderer::getInstance() {
     static Renderer *instance;
@@ -34,7 +35,9 @@ bool Renderer::Init(SDL_Window *pWindow, uint32_t pWidth, uint32_t pHeight) {
     SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_VERBOSE_BOOLEAN, true);
     SDL_SetStringProperty(props, SDL_PROP_GPU_DEVICE_CREATE_NAME_STRING, "vulkan");
 
-    SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true);
+    SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true); // Vulkan
+    SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_MSL_BOOLEAN, true);   // Metal
+    SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_DXIL_BOOLEAN, true);  // DirectX
 
     SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_VULKAN_REQUIRE_HARDWARE_ACCELERATION_BOOLEAN, true);
     // SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_DXIL_BOOLEAN, true); // don't need these for now
@@ -118,9 +121,9 @@ bool Renderer::Init(SDL_Window *pWindow, uint32_t pWidth, uint32_t pHeight) {
     }
 
     std::array vertices{
-        glm::vec3{-1.0f, -1.0f, 0.0f}, // Bottom-Left
-        glm::vec3{1.0f, -1.0f, 0.0f},  // Bottom-Right
-        glm::vec3{0.0f, 1.0f, 0.0f},   // Top Middle
+        VertexData{.position = glm::vec3{-1.0f, -1.0f, 0.0f}, .color = glm::vec3{1.0f, 0.0f, 0.0f}}, // Bottom-Left
+        VertexData{.position = glm::vec3{1.0f, -1.0f, 0.0f}, .color = glm::vec3{0.0f, 1.0f, 0.0f}},  // Bottom-Right
+        VertexData{.position = glm::vec3{0.0f, 1.0f, 0.0f}, .color = glm::vec3{0.0f, 0.0f, 1.0f}},   // Top Middle
     };
 
     if (!CreateVertexBuffer(vertices)) {
@@ -185,28 +188,40 @@ bool Renderer::CreatePipeline() {
 
     constexpr std::array vertexBufferDescriptions{SDL_GPUVertexBufferDescription{
         .slot = 0,
-        .pitch = sizeof(glm::vec3),
+        .pitch = sizeof(VertexData),
         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
         .instance_step_rate = 0,
     }};
 
+    // constexpr std::array vertexAttributes{SDL_GPUVertexAttribute{
+    //                                           .location = 0u,
+    //                                           .buffer_slot = 0u,
+    //                                           .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
+    //                                           .offset = 0u * sizeof(float),
+    //                                       },
+    //                                       SDL_GPUVertexAttribute{
+    //                                           .location = 1u,
+    //                                           .buffer_slot = 0u,
+    //                                           .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
+    //                                           .offset = 1u * sizeof(float),
+    //                                       },
+    //                                       SDL_GPUVertexAttribute{
+    //                                           .location = 2u,
+    //                                           .buffer_slot = 0u,
+    //                                           .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
+    //                                           .offset = 2u * sizeof(float),
+    //                                       }};
     constexpr std::array vertexAttributes{SDL_GPUVertexAttribute{
                                               .location = 0u,
                                               .buffer_slot = 0u,
-                                              .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
-                                              .offset = 0u * sizeof(float),
+                                              .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+                                              .offset = 0u,
                                           },
                                           SDL_GPUVertexAttribute{
                                               .location = 1u,
                                               .buffer_slot = 0u,
-                                              .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
-                                              .offset = 1u * sizeof(float),
-                                          },
-                                          SDL_GPUVertexAttribute{
-                                              .location = 2u,
-                                              .buffer_slot = 0u,
-                                              .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
-                                              .offset = 2u * sizeof(float),
+                                              .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+                                              .offset = sizeof(glm::vec3),
                                           }};
     const std::array colorTargetDescriptions{SDL_GPUColorTargetDescription{
         .format = SDL_GetGPUSwapchainTextureFormat(device, window),
@@ -217,14 +232,16 @@ bool Renderer::CreatePipeline() {
         .fragment_shader = shaders.GetFragmentShader(),
         .vertex_input_state =
             SDL_GPUVertexInputState{
+                // VkPipelineVertexInputState
                 .vertex_buffer_descriptions = vertexBufferDescriptions.data(),
                 .num_vertex_buffers = vertexBufferDescriptions.size(),
                 .vertex_attributes = vertexAttributes.data(),
                 .num_vertex_attributes = vertexAttributes.size(),
             },
-        .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+        .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST, // VkPipelineInputAssemblyState.topology
         .rasterizer_state =
             SDL_GPURasterizerState{
+                // VkPipelineRasterizationState
                 .fill_mode = SDL_GPU_FILLMODE_FILL,
                 .cull_mode = SDL_GPU_CULLMODE_BACK,
                 .front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
@@ -244,14 +261,14 @@ bool Renderer::CreatePipeline() {
     return true;
 }
 
-bool Renderer::CreateVertexBuffer(const std::span<glm::vec3> vertices) {
+bool Renderer::CreateVertexBuffer(const std::span<VertexData> pVertices) {
     ZoneScoped;
-    numVertices = vertices.size();
-    const Uint32 verticesSize{numVertices * static_cast<Uint32>(sizeof(glm::vec3))};
+    numVertices = pVertices.size();
+    const Uint32 vertDataSize{numVertices * static_cast<Uint32>(sizeof(VertexData))};
 
     const SDL_GPUBufferCreateInfo vertexBufferInfo{
         .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
-        .size = verticesSize,
+        .size = vertDataSize,
     };
     // Create vertex buffer that stores vertices of meshes.
     vertexBuffer = SDL_CreateGPUBuffer(device, &vertexBufferInfo);
@@ -263,7 +280,7 @@ bool Renderer::CreateVertexBuffer(const std::span<glm::vec3> vertices) {
     // Upload vertex buffer into GPU's memory from CPU's memory
     const SDL_GPUTransferBufferCreateInfo transferBufferInfo{
         .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = verticesSize,
+        .size = vertDataSize,
     };
     SDL_GPUTransferBuffer *transferBuffer{SDL_CreateGPUTransferBuffer(device, &transferBufferInfo)};
     if (!transferBuffer) {
@@ -278,7 +295,7 @@ bool Renderer::CreateVertexBuffer(const std::span<glm::vec3> vertices) {
         return false;
     }
 
-    SDL_memcpy(transferData, vertices.data(), verticesSize);
+    SDL_memcpy(transferData, pVertices.data(), vertDataSize);
     SDL_UnmapGPUTransferBuffer(device, transferBuffer); // hide the virtual address.
 
     // Command buffer for transfer operation
@@ -300,7 +317,7 @@ bool Renderer::CreateVertexBuffer(const std::span<glm::vec3> vertices) {
     const SDL_GPUBufferRegion bufferRegion{
         .buffer = vertexBuffer,
         .offset = 0,
-        .size = verticesSize,
+        .size = vertDataSize,
     };
     SDL_UploadToGPUBuffer(copyPass, &bufferLocation, &bufferRegion, false);
 

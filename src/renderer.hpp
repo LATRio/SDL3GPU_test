@@ -4,6 +4,7 @@
 #include <glm/glm.hpp>
 #include <span>
 
+struct VertexData;
 struct FrameData {
     SDL_GPUCommandBuffer *commandBuffer{};
     SDL_GPUTexture *swapchainTexture{};
@@ -22,7 +23,7 @@ class Renderer {
 
   private:
     bool CreatePipeline();
-    bool CreateVertexBuffer(std::span<glm::vec3> vertices);
+    bool CreateVertexBuffer(std::span<VertexData> pVertices);
 
     SDL_GPUVulkanOptions vkOpts{};
 
