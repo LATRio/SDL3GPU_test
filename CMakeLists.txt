@@ -10,8 +10,6 @@ add_executable(SDL3GPU_test
         src/main.cpp
         src/renderer.cpp
         src/renderer.hpp
-        src/shaders.cpp
-        src/shaders.hpp
         src/input.cpp
         src/input.hpp
         src/asset_manager.cpp
@@ -19,6 +17,8 @@ add_executable(SDL3GPU_test
         src/camera.cpp
         src/camera.hpp
         src/types.hpp
+        src/shader_manager.cpp
+        src/shader_manager.hpp
 )
 
 target_compile_definitions(SDL3GPU_test PRIVATE

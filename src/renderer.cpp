@@ -5,7 +5,7 @@
 #include <tracy/Tracy.hpp>
 #include <vulkan/vulkan.hpp>
 
-#include "shaders.hpp"
+#include "shader_manager.hpp"
 #include "types.hpp"
 
 Renderer *Renderer::getInstance() {
@@ -135,6 +135,7 @@ bool Renderer::Init(SDL_Window *pWindow, uint32_t pWidth, uint32_t pHeight) {
 
 bool Renderer::Render() const {
     ZoneScoped;
+
     SDL_GPUCommandBuffer *renderCmdBuf{SDL_AcquireGPUCommandBuffer(device)};
     if (!renderCmdBuf) {
         SDL_Log("Couldn't acquire GPU command buffer: %s", SDL_GetError());
@@ -179,10 +180,16 @@ bool Renderer::Render() const {
 
 bool Renderer::CreatePipeline() {
     ZoneScoped;
-    Shaders shaders;
 
-    if (!shaders.LoadShader("OnlyPosition.hlsl")) {
-        SDL_Log("Failed to load vertex and/or fragment shaders");
+    SDL_GPUShader *vertShader{ShaderManager::LoadShaderFromFile("OnlyPosition.hlsl", ShaderManager::Type::VERTEX)};
+    SDL_GPUShader *fragShader{ShaderManager::LoadShaderFromFile("OnlyPosition.hlsl", ShaderManager::Type::FRAGMENT)};
+
+    if (!vertShader) {
+        // SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load vertex shader!");
+        return false;
+    }
+    if (!fragShader) {
+        // SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load fragment shader!");
         return false;
     }
 
@@ -193,24 +200,6 @@ bool Renderer::CreatePipeline() {
         .instance_step_rate = 0,
     }};
 
-    // constexpr std::array vertexAttributes{SDL_GPUVertexAttribute{
-    //                                           .location = 0u,
-    //                                           .buffer_slot = 0u,
-    //                                           .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
-    //                                           .offset = 0u * sizeof(float),
-    //                                       },
-    //                                       SDL_GPUVertexAttribute{
-    //                                           .location = 1u,
-    //                                           .buffer_slot = 0u,
-    //                                           .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
-    //                                           .offset = 1u * sizeof(float),
-    //                                       },
-    //                                       SDL_GPUVertexAttribute{
-    //                                           .location = 2u,
-    //                                           .buffer_slot = 0u,
-    //                                           .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
-    //                                           .offset = 2u * sizeof(float),
-    //                                       }};
     constexpr std::array vertexAttributes{SDL_GPUVertexAttribute{
                                               .location = 0u,
                                               .buffer_slot = 0u,
@@ -228,8 +217,8 @@ bool Renderer::CreatePipeline() {
     }};
 
     const SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{
-        .vertex_shader = shaders.GetVertexShader(),
-        .fragment_shader = shaders.GetFragmentShader(),
+        .vertex_shader = vertShader,
+        .fragment_shader = fragShader,
         .vertex_input_state =
             SDL_GPUVertexInputState{
                 // VkPipelineVertexInputState
@@ -257,6 +246,9 @@ bool Renderer::CreatePipeline() {
         SDL_Log("Couldn't create graphics pipeline! %s", SDL_GetError());
         return false;
     }
+
+    SDL_ReleaseGPUShader(device, fragShader);
+    SDL_ReleaseGPUShader(device, vertShader);
 
     return true;
 }

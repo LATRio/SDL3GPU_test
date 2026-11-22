@@ -1,9 +1,6 @@
 struct VertexInput {
     float3 position : POSITION;
     float3 color : COLOR0;
-// 	float x : TEXCOORD0;
-// 	float y : TEXCOORD1;
-// 	float z : TEXCOORD2;
 };
 
 struct VertexToPixel {

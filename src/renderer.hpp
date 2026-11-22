@@ -1,14 +1,9 @@
 #pragma once
 #include <SDL3/SDL_gpu.h>
 #include <cstdint>
-#include <glm/glm.hpp>
 #include <span>
 
 struct VertexData;
-struct FrameData {
-    SDL_GPUCommandBuffer *commandBuffer{};
-    SDL_GPUTexture *swapchainTexture{};
-};
 
 class Renderer {
   public:

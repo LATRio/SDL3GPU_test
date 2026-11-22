@@ -1,8 +1,5 @@
 #include "asset_manager.hpp"
-#include <SDL3/SDL_filesystem.h>
-#include <SDL3/SDL_iostream.h>
 #include <SDL3/SDL_log.h>
-#include <fastgltf/glm_element_traits.hpp>
 #include <tracy/Tracy.hpp>
 
 AssetManager *AssetManager::getInstance() {

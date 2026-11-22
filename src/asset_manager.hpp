@@ -14,4 +14,7 @@ class AssetManager {
   private:
     AssetManager() = default;
 
+    // std::unordered_map<std::string, Mesh> mMeshes;
+    // std::unordered_map<std::string, Texture> mTextures;
+    // std::unordered_map<std::string, Material> mMaterials;
 };
