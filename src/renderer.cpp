@@ -6,12 +6,13 @@
 #include <vulkan/vulkan.hpp>
 #include <fastgltf/types.hpp>
 
-#include "imgui.h"
 #include "backends/imgui_impl_sdl3.h"
 #include "backends/imgui_impl_sdlgpu3.h"
+#include "components/scene_manager.hpp"
+#include "components/transform_component.hpp"
+#include "imgui.h"
 #include "shader_manager.hpp"
 #include "types.hpp"
-
 
 Renderer *Renderer::getInstance() {
     static Renderer *instance;
@@ -28,8 +29,11 @@ Renderer::~Renderer() {
     ImGui_ImplSDLGPU3_Shutdown();
     ImGui::DestroyContext();
 
-    SDL_ReleaseGPUBuffer(device, indexBuffer);
-    SDL_ReleaseGPUBuffer(device, vertexBuffer);
+    for (const auto& obj : mRenderObjects) {
+        SDL_ReleaseGPUBuffer(device, obj.vertexBuffer);
+        SDL_ReleaseGPUBuffer(device, obj.indexBuffer);
+    }
+
     SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
 
     SDL_ReleaseWindowFromGPUDevice(device, window);
@@ -130,17 +134,7 @@ bool Renderer::Init(SDL_Window *pWindow, uint32_t pWidth, uint32_t pHeight) {
         return false;
     }
 
-    quadMesh.vertices = {
-        VertexData{.position = glm::vec3{-1.0f, -1.0f, 0.0f}, .color = glm::vec3{1.0f, 0.0f, 0.0f}}, // Bottom-Left
-        VertexData{.position = glm::vec3{1.0f, -1.0f, 0.0f}, .color = glm::vec3{0.0f, 1.0f, 0.0f}},  // Bottom-Right
-        VertexData{.position = glm::vec3{1.0f, 1.0f, 0.0f}, .color = glm::vec3{0.0f, 0.0f, 1.0f}},   // Top-Right
-        VertexData{.position = glm::vec3{-1.0f, 1.0f, 0.0f}, .color = glm::vec3{1.0f, 1.0f, 0.0f}},   // Top-Left
-    };
-    quadMesh.indices = {0u, 1u, 2u, 2u, 3u, 0u};
-
-    if (!UploadMeshBuffer(quadMesh)) {
-        return false;
-    }
+    // TODO: INIT SCENES
 
     return true;
 }
@@ -185,7 +179,6 @@ bool Renderer::BeginFrame() {
 
 bool Renderer::EndFrame() const {
     ZoneScoped;
-
     if (!SDL_SubmitGPUCommandBuffer(frameRenderCmdBuf)) {
         SDL_Log("Couldn't submit command buffer: %s", SDL_GetError());
         return false;
@@ -194,7 +187,7 @@ bool Renderer::EndFrame() const {
     return true;
 }
 
-bool Renderer::Render() const {
+bool Renderer::Render() {
     ZoneScoped;
 
     const SDL_GPUColorTargetInfo colorTargetInfo{
@@ -204,22 +197,27 @@ bool Renderer::Render() const {
         .store_op = SDL_GPU_STOREOP_STORE,
     };
 
-    SDL_GPURenderPass *renderPass{SDL_BeginGPURenderPass(frameRenderCmdBuf, &colorTargetInfo, 1u, nullptr)};
+    renderPass = SDL_BeginGPURenderPass(frameRenderCmdBuf, &colorTargetInfo, 1u, nullptr);
 
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
+    cameraData->model = transformComp->GetTransformMatrix();
 
-    const std::array vertexBuffers{SDL_GPUBufferBinding{
-        .buffer = vertexBuffer,
-        .offset = 0u,
-    }};
-    SDL_BindGPUVertexBuffers(renderPass, 0u, vertexBuffers.data(), vertexBuffers.size());
-    const SDL_GPUBufferBinding indBind{
-        .buffer = indexBuffer,
-        .offset = 0u,
-    };
-    SDL_BindGPUIndexBuffer(renderPass, &indBind, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    SDL_PushGPUVertexUniformData(frameRenderCmdBuf, 0, cameraData, sizeof(CameraData));
 
-    SDL_DrawGPUIndexedPrimitives(renderPass, quadMesh.indices.size(), 1u, 0u, 0, 0u);
+    for (const auto& obj : mRenderObjects) {
+        const std::array vertexBuffers{SDL_GPUBufferBinding{
+            .buffer = obj.vertexBuffer,
+            .offset = 0u,
+        }};
+        SDL_BindGPUVertexBuffers(renderPass, 0u, vertexBuffers.data(), vertexBuffers.size());
+        const SDL_GPUBufferBinding indBind{
+            .buffer = obj.indexBuffer,
+            .offset = 0u,
+        };
+        SDL_BindGPUIndexBuffer(renderPass, &indBind, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+        SDL_DrawGPUIndexedPrimitives(renderPass, obj.mesh.indices.size(), 1u, 0u, 0, 0u);
+    }
 
     SDL_EndGPURenderPass(renderPass);
 
@@ -230,9 +228,8 @@ bool Renderer::RenderImGui() const {
     ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
-    ImGui::ShowDemoWindow(); // Just demo
 
-    // DO STUFF HERE
+    SceneManager::GetInstance()->RenderImGui();
 
     ImGui::Render();
     const auto draw_data{ImGui::GetDrawData()};
@@ -255,11 +252,22 @@ bool Renderer::RenderImGui() const {
     return true;
 }
 
+void Renderer::AddRenderObject(const MeshData &pMesh) {
+    SDL_GPUBuffer* vertexBuffer{};
+    SDL_GPUBuffer* indexBuffer{};
+    UploadMeshBuffer(pMesh, vertexBuffer, indexBuffer);
+    mRenderObjects.emplace_back(pMesh, vertexBuffer, indexBuffer);
+}
+
+void Renderer::SetCameraData(CameraData &pCameraData) {
+    cameraData = &pCameraData;
+}
+
 bool Renderer::CreatePipeline() {
     ZoneScoped;
 
-    SDL_GPUShader *vertShader{ShaderManager::LoadShaderFromFile("OnlyPosition.hlsl", ShaderManager::Type::VERTEX)};
-    SDL_GPUShader *fragShader{ShaderManager::LoadShaderFromFile("OnlyPosition.hlsl", ShaderManager::Type::FRAGMENT)};
+    SDL_GPUShader *vertShader{ShaderManager::LoadShaderFromFile("DefaultShader.hlsl", ShaderManager::Type::VERTEX)};
+    SDL_GPUShader *fragShader{ShaderManager::LoadShaderFromFile("DefaultShader.hlsl", ShaderManager::Type::FRAGMENT)};
 
     if (!vertShader) {
         // SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Failed to load vertex shader!");
@@ -309,7 +317,7 @@ bool Renderer::CreatePipeline() {
             SDL_GPURasterizerState{
                 // VkPipelineRasterizationState
                 .fill_mode = SDL_GPU_FILLMODE_FILL,
-                .cull_mode = SDL_GPU_CULLMODE_BACK,
+                .cull_mode = SDL_GPU_CULLMODE_NONE,
                 .front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
             },
         .target_info =
@@ -330,7 +338,7 @@ bool Renderer::CreatePipeline() {
     return true;
 }
 
-bool Renderer::UploadMeshBuffer(const MeshData &pMesh) {
+bool Renderer::UploadMeshBuffer(const MeshData &pMesh, SDL_GPUBuffer *&pVertexBuffer, SDL_GPUBuffer *&pIndexBuffer) {
     ZoneScoped;
 
     const Uint32 vertDataSize{static_cast<Uint32>(pMesh.vertices.size()) * static_cast<Uint32>(sizeof(pMesh.vertices[0]))};
@@ -340,23 +348,23 @@ bool Renderer::UploadMeshBuffer(const MeshData &pMesh) {
         .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
         .size = vertDataSize,
     };
-    vertexBuffer = SDL_CreateGPUBuffer(device, &vertexBufferInfo);
-    if (!vertexBuffer) {
+    pVertexBuffer = SDL_CreateGPUBuffer(device, &vertexBufferInfo);
+    if (!pVertexBuffer) {
         SDL_Log("Couldn't create vertex buffer: %s", SDL_GetError());
         return false;
     }
-    SDL_SetGPUBufferName(device, vertexBuffer, "QuadVertexBuffer");
+    SDL_SetGPUBufferName(device, pVertexBuffer, "QuadVertexBuffer");
 
     const SDL_GPUBufferCreateInfo indexBufferInfo{
         .usage = SDL_GPU_BUFFERUSAGE_INDEX,
         .size = indDataSize,
     };
-    indexBuffer = SDL_CreateGPUBuffer(device, &indexBufferInfo);
-    if (!indexBuffer) {
+    pIndexBuffer = SDL_CreateGPUBuffer(device, &indexBufferInfo);
+    if (!pIndexBuffer) {
         SDL_Log("Couldn't create index buffer: %s", SDL_GetError());
         return false;
     }
-    SDL_SetGPUBufferName(device, indexBuffer, "QuadIndexBuffer");
+    SDL_SetGPUBufferName(device, pIndexBuffer, "QuadIndexBuffer");
 
     // Upload buffers into GPU's memory from CPU's memory
     const SDL_GPUTransferBufferCreateInfo transferBufferInfo{
@@ -376,8 +384,8 @@ bool Renderer::UploadMeshBuffer(const MeshData &pMesh) {
         return false;
     }
 
-    SDL_memcpy(transferData, quadMesh.vertices.data(), vertDataSize);
-    SDL_memcpy(static_cast<char*>(transferData) + vertDataSize, quadMesh.indices.data(), indDataSize);
+    SDL_memcpy(transferData, pMesh.vertices.data(), vertDataSize);
+    SDL_memcpy(static_cast<char*>(transferData) + vertDataSize, pMesh.indices.data(), indDataSize);
 
     SDL_UnmapGPUTransferBuffer(device, transferBuffer);
 
@@ -398,7 +406,7 @@ bool Renderer::UploadMeshBuffer(const MeshData &pMesh) {
 
     // Destination memory location (GPU)
     const SDL_GPUBufferRegion vertBufferRegion{
-        .buffer = vertexBuffer,
+        .buffer = pVertexBuffer,
         .offset = 0u,
         .size = vertDataSize,
     };
@@ -412,7 +420,7 @@ bool Renderer::UploadMeshBuffer(const MeshData &pMesh) {
 
     // Destination memory location (GPU)
     const SDL_GPUBufferRegion indBufferRegion{
-        .buffer = indexBuffer,
+        .buffer = pIndexBuffer,
         .offset = 0u,
         .size = indDataSize,
     };

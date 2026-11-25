@@ -60,7 +60,7 @@ void AssetManager::loadGltf(const std::string_view &filename) {
         return;
     }
 
-    for (auto &scene : asset.scenes) {
+    for (const auto &scene : asset.scenes) {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Loaded scene: %s", scene.name.c_str());
     }
 }

@@ -1,3 +1,5 @@
+#include "InputStructures.hlsli"
+
 struct VertexInput {
     float3 position : POSITION;
     float3 color : COLOR0;
@@ -18,7 +20,8 @@ struct ColorOutput {
 
 VertexToPixel VSMain(VertexInput input) {
 	VertexToPixel output;
-	output.Position = float4(input.position.x, input.position.y, input.position.z, 1.0f);
+	float4 worldPos = mul(model, float4(input.position, 1.0f));
+	output.Position = mul(viewProj, worldPos);
 	output.Color = input.color;
     return output;
 }

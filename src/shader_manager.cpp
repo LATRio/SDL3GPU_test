@@ -61,6 +61,7 @@ SDL_GPUShader *ShaderManager::CompileShader(SDL_GPUDevice *device, const char *c
     const SDL_ShaderCross_HLSL_Info hlslInfo{
         .source = code,
         .entrypoint = entrypoint,
+        .include_dir = "shaders",
         .shader_stage = stage,
     };
     size_t bytecodeSize{};

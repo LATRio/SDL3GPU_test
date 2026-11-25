@@ -38,7 +38,7 @@ add_subdirectory(tracy SYSTEM EXCLUDE_FROM_ALL)
 add_subdirectory(glm SYSTEM EXCLUDE_FROM_ALL)
 target_compile_definitions(SDL3GPU_test PUBLIC
         GLM_ENABLE_EXPERIMENTAL
-        #GLM_FORCE_DEPTH_ZERO_TO_ONE
+        GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
 target_link_libraries(SDL3GPU_test PRIVATE
